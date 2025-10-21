@@ -29,7 +29,7 @@ export const handlePredictionRequest = async (req, res) => {
     // Construct the payload for the Flask service
     const requestPayload = {
         ticker: ticker.toUpperCase(),
-        days: days,
+        days: days, // number of days to predict
         // When integrating S3, the Node.js backend would fetch the 60-day 
         // historical data CSV for 'ticker' from S3 here, parse it, and 
         // include the data array in this payload.
