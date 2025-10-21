@@ -1,5 +1,4 @@
 import express from 'express';
-// Import the handler function
 import { handlePredictionRequest } from '../handlers/predictionHandler.js';
 
 const router = express.Router();
