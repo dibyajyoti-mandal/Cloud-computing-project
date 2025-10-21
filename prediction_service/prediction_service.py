@@ -38,10 +38,10 @@ try:
     # Load the state dictionary (weights)
     PYTORCH_MODEL.load_state_dict(torch.load(MODEL_PATH))
     PYTORCH_MODEL.eval() # Set model to evaluation mode (important for production)
-    print(f"✅ PyTorch model '{MODEL_PATH}' loaded successfully.")
+    print(f"PyTorch model '{MODEL_PATH}' loaded successfully.")
 except Exception as e:
     PYTORCH_MODEL = None
-    print(f"❌ Error loading PyTorch model: {e}")
+    print(f"Error loading PyTorch model: {e}")
 
 class PredictionService:
     @staticmethod
