@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, status
 from models import PredictionRequest
 from prediction_service import PredictionService, SEQUENCE_LENGTH
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 app = FastAPI(
     title="PyTorch LSTM Stock Prediction API",
@@ -10,6 +10,10 @@ app = FastAPI(
 )
 
 # --- Endpoints ---
+
+PredictionService = PredictionService()
+PredictionService.get_model_status()
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():
@@ -20,7 +24,7 @@ async def health_check():
         "status": "healthy",
         "service": "PyTorch LSTM Stock Prediction API",
         "model_loaded": PredictionService.get_model_status(),
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.post("/predict", status_code=status.HTTP_200_OK)

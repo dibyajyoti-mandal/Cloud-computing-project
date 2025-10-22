@@ -3,11 +3,12 @@ import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 from typing import List
+import traceback
 
 # Configuration constants
 SEQUENCE_LENGTH = 60
 MODEL_PATH = 'lstm_stock_predictor.pt' 
-INPUT_SIZE = 1 # We are using only one feature (closing price)
+INPUT_SIZE = 4 # We are using only one feature (closing price)
 HIDDEN_SIZE = 50 # Must match your training configuration
 NUM_LAYERS = 2   # Must match your training configuration
 
@@ -37,10 +38,11 @@ try:
     PYTORCH_MODEL = LSTMModel(INPUT_SIZE, HIDDEN_SIZE, NUM_LAYERS)
     # Load the state dictionary (weights)
     PYTORCH_MODEL.load_state_dict(torch.load(MODEL_PATH))
-    PYTORCH_MODEL.eval() # Set model to evaluation mode (important for production)
+    PYTORCH_MODEL.eval() # Set model to evaluation mode
     print(f"PyTorch model '{MODEL_PATH}' loaded successfully.")
 except Exception as e:
     PYTORCH_MODEL = None
+    # Print the full traceback to diagnose the problem
     print(f"Error loading PyTorch model: {e}")
 
 class PredictionService:
