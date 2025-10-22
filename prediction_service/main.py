@@ -1,11 +1,9 @@
 from fastapi import FastAPI, HTTPException, status
 from models import PredictionRequest
-# Import the new PyTorch-based service
 from prediction_service import PredictionService, SEQUENCE_LENGTH
 import traceback
 from datetime import datetime
 
-# --- FastAPI Initialization ---
 app = FastAPI(
     title="PyTorch LSTM Stock Prediction API",
     description="Microservice for multi-day stock price forecasting using a pre-trained PyTorch LSTM model."

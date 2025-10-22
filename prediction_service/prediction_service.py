@@ -11,7 +11,7 @@ INPUT_SIZE = 1 # We are using only one feature (closing price)
 HIDDEN_SIZE = 50 # Must match your training configuration
 NUM_LAYERS = 2   # Must match your training configuration
 
-# --- PyTorch Model Definition (Must match the architecture you trained!) ---
+# --- PyTorch Model Definition ---
 class LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers):
         super(LSTMModel, self).__init__()
