@@ -9,8 +9,7 @@ app = FastAPI(
     description="Microservice for multi-day stock price forecasting using a pre-trained PyTorch LSTM model."
 )
 
-# --- Endpoints ---
-
+# Initialize service/load model when app starts
 PredictionService = PredictionService()
 PredictionService.get_model_status()
 
@@ -77,11 +76,13 @@ async def predict_stock_price(request_data: PredictionRequest):
         )
 
     # 3. Return Results
+    last_known_close_price = request_data.data[-1].Close # FIX: Extract 'Close' price as float
+    
     return {
         "ticker": request_data.ticker,
         "days_predicted": request_data.days,
         "predictions": predicted_prices,
-        "last_known_price": request_data.data[-1]
+        "last_known_price": last_known_close_price
     }
 
 # --- Run server using ---
