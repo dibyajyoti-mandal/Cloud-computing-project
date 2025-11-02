@@ -112,8 +112,11 @@ prediction_service/
 - `API_KEY`: Secret used to authorize requests. Client must send `X-API-KEY` header.
 
 ### Python ML Service
-- No environment variables required for basic operation
-- Model files should be present in the prediction_service directory
+- `S3_BUCKET_NAME`: AWS S3 bucket name for caching stock data (default: "flaskapps3bucketdmandal")
+- `AWS_REGION`: AWS region for S3 operations (default: "ap-south-1")
+- `AWS_ACCESS_KEY_ID`: AWS access key ID (required for S3 caching)
+- `AWS_SECRET_ACCESS_KEY`: AWS secret access key (required for S3 caching)
+- Model files (`lstm_stock_predictor.pt`) should be present in the prediction_service directory
 
 ## API Documentation
 
@@ -140,16 +143,17 @@ prediction_service/
 ```json
 { 
   "ticker": "AAPL", 
-  "days": 5,
-  "data": [290.11, 292.05, 291.50, 295.30, 293.70, ...]
+  "days": 5
 }
 ```
+**Note**: The historical data is automatically fetched from the FastAPI service's `/stock/{ticker}` endpoint. No need to provide `data` in the request.
 - **Success Response**: `200 OK`
 ```json
 {
   "ticker": "AAPL",
   "predictionDays": 5,
   "predictions": [123.4, 124.1, 125.0, 123.9, 124.7],
+  "lastKnownPrice": 293.70,
   "message": "Prediction successfully retrieved from ML service."
 }
 ```
@@ -174,6 +178,32 @@ prediction_service/
 }
 ```
 
+#### Get Stock Historical Data
+- **Method**: GET
+- **Path**: `/stock/{ticker}`
+- **Response**: `200 OK`
+Returns an array of the last 119 days of historical stock data (cached in S3 when available):
+```json
+[
+  {
+    "Open": 250.00,
+    "High": 255.50,
+    "Low": 249.00,
+    "Close": 254.10,
+    "Volume": 45000000
+  },
+  {
+    "Open": 254.50,
+    "High": 256.00,
+    "Low": 251.00,
+    "Close": 252.80,
+    "Volume": 43000000
+  },
+  ...
+]
+```
+**Note**: Data is returned in reverse chronological order (most recent first) and is automatically reversed during preprocessing.
+
 #### Predict (Direct)
 - **Method**: POST
 - **Path**: `/predict`
@@ -184,9 +214,26 @@ prediction_service/
 {
   "ticker": "AAPL",
   "days": 5,
-  "data": [290.11, 292.05, 291.50, 295.30, 293.70, ...]
+  "data": [
+    {
+      "Open": 250.00,
+      "High": 255.50,
+      "Low": 249.00,
+      "Close": 254.10,
+      "Volume": 45000000
+    },
+    {
+      "Open": 254.50,
+      "High": 256.00,
+      "Low": 251.00,
+      "Close": 252.80,
+      "Volume": 43000000
+    },
+    ...
+  ]
 }
 ```
+**Note**: The `data` array must contain at least 60 `DailyRecord` objects (Open, High, Low, Close, Volume). Historical data received in reverse order is automatically reversed during preprocessing.
 - **Success Response**: `200 OK`
 ```json
 {
@@ -217,8 +264,7 @@ curl -s -X POST http://localhost:3000/api/predict \
   -H "X-API-KEY: your-super-secret-key-12345" \
   -d '{
     "ticker": "AAPL",
-    "days": 5,
-    "data": [290.11, 292.05, 291.50, 295.30, 293.70, 296.00, 297.10]
+    "days": 5
   }'
 ```
 
@@ -229,6 +275,11 @@ Health check:
 curl -s http://localhost:8000/health
 ```
 
+Get stock historical data:
+```bash
+curl -s http://localhost:8000/stock/AAPL
+```
+
 Predict directly:
 ```bash
 curl -s -X POST http://localhost:8000/predict \
@@ -236,7 +287,10 @@ curl -s -X POST http://localhost:8000/predict \
   -d '{
     "ticker": "AAPL", 
     "days": 5,
-    "data": [290.11, 292.05, 291.50, 295.30, 293.70, 296.00, 297.10]
+    "data": [
+      {"Open": 250.00, "High": 255.50, "Low": 249.00, "Close": 254.10, "Volume": 45000000},
+      {"Open": 254.50, "High": 256.00, "Low": 251.00, "Close": 252.80, "Volume": 43000000}
+    ]
   }'
 ```
 
@@ -249,14 +303,23 @@ curl -s -X POST http://localhost:8000/predict \
 
 ### Python ML Service
 - Uses FastAPI with automatic OpenAPI documentation at `http://localhost:8000/docs`
-- PyTorch LSTM model requires sufficient historical data (minimum sequence length)
+- PyTorch LSTM model requires sufficient historical data (minimum 60 days)
 - Model loading happens at startup - check logs for any model loading errors
 - Virtual environment (`cc/`) should not be committed to version control
+- Integrates with AWS S3 for caching historical stock data
+- Historical data fetched via yfinance is automatically cached to S3 for faster subsequent requests
 
 ### Data Requirements
-- Historical data must contain at least the model's sequence length (typically 50+ days)
-- Data should be normalized closing prices
+- Historical data must contain at least 60 days of DailyRecord objects (Open, High, Low, Close, Volume)
+- Data is automatically reversed during preprocessing if received in reverse chronological order
 - More historical data generally leads to better predictions
+- The service automatically fetches the last 119 days of data when using the `/stock/{ticker}` endpoint
+
+### Environment Variables (Python ML Service)
+- `S3_BUCKET_NAME`: AWS S3 bucket name for caching (default: "flaskapps3bucketdmandal")
+- `AWS_REGION`: AWS region for S3 (default: "ap-south-1")
+- `AWS_ACCESS_KEY_ID`: AWS access key ID (required)
+- `AWS_SECRET_ACCESS_KEY`: AWS secret access key (required)
 
 ### Deployment Considerations
 - Both services can be containerized independently
