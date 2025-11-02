@@ -5,3 +5,4 @@ torch==2.9.0        # Use a stable version of PyTorch
 numpy
 scikit-learn
 pandas
+yfinance

@@ -48,6 +48,9 @@ class PredictionService:
     def preprocess_data(historical_data: List[DailyRecord]): 
         """Convert historical records to scaled PyTorch tensor with 4 features."""
         
+        # Reverse the data since it arrives in reverse chronological order
+        historical_data = list(reversed(historical_data))
+        
         # Convert Pydantic models to dicts
         raw_data = [d.model_dump() for d in historical_data]
         df = pd.DataFrame(raw_data)
