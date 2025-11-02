@@ -39,7 +39,6 @@ async def predict_stock_price(request_data: PredictionRequest):
             detail="Model is not loaded. Check server logs for load error."
         )
 
-    # Manual validation for data length
     if len(request_data.data) < SEQUENCE_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -48,7 +47,6 @@ async def predict_stock_price(request_data: PredictionRequest):
 
     # 1. Preprocess Data
     try:
-        # X_input is now a PyTorch tensor
         X_input_tensor, scaler = PredictionService.preprocess_data(request_data.data)
         
     except Exception as e:
@@ -85,5 +83,4 @@ async def predict_stock_price(request_data: PredictionRequest):
         "last_known_price": last_known_close_price
     }
 
-# --- Run server using ---
 # uvicorn main:app --reload --host 0.0.0.0 --port 8000
