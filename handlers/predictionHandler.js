@@ -1,16 +1,21 @@
-import axios from 'axios';
-
+import axios from 'axios';    
 /**
- * Handles the prediction request by validating input, constructing the payload,
- * calling the Flask inference service, and formatting the final response.
+ * Handles the prediction request by:
+ * 1. Fetching the last 119 days of full historical data from FastAPI's /stock/{ticker} endpoint.
+ * 2. Constructing the final prediction payload with the historical data.
+ * 3. Calling the FastAPI /predict endpoint.
  *
  * @param {object} req - Express request object.
  * @param {object} res - Express response object.
  */
 export const handlePredictionRequest = async (req, res) => {
-    // Get the Flask URL set in the main app.js (via app.set/req.app.get)
-    const flaskInferenceUrl = req.app.get('flaskInferenceUrl');
+    // Get URLs from the app settings
+    const flaskInferenceUrl = req.app.get('flaskInferenceUrl'); // This is the FastAPI /predict URL
+    const fastapiHealthUrl = req.app.get('fastapiHealthUrl');   // Used to derive the FastAPI base URL
+    const fastapiBaseUrl = fastapiHealthUrl.replace('/health', '');
+
     const { ticker, days } = req.body;
+    const tickerUpper = ticker.toUpperCase();
 
     // --- 1. Input Validation ---
     if (!ticker || !days) {
@@ -25,37 +30,68 @@ export const handlePredictionRequest = async (req, res) => {
             message: 'Days must be a number between 1 and 30.' 
         });
     }
+
+    let historicalData;
     
-    // Construct the payload for the Flask service
+    // --- 2. Call FastAPI to GET Historical Data ---
+    const fastapiStockUrl = `${fastapiBaseUrl}/stock/${tickerUpper}`;
+    
+    try {
+        console.log(`Fetching historical data from: ${fastapiStockUrl}`);
+        const historyResponse = await axios.get(fastapiStockUrl, { timeout: 10000 });
+        historicalData = historyResponse.data; // This should be the list of 119 DailyRecord objects
+        
+        // Manual check for data structure consistency
+        if (!Array.isArray(historicalData) || historicalData.length < 119) {
+             throw new Error("FastAPI did not return the required 119 days of historical data.");
+        }
+
+    } catch (error) {
+        console.error('Error fetching historical data from FastAPI:', error.message);
+        
+        // Handle network/connection errors or data unavailability from FastAPI /stock
+        if (axios.isAxiosError(error) && error.response) {
+            return res.status(error.response.status).json({
+                error: 'Upstream Data Fetch Error',
+                message: error.response.data.detail || `FastAPI stock data service returned status ${error.response.status}.`
+            });
+        }
+        
+        return res.status(503).json({ 
+            error: 'Service Unavailable', 
+            message: 'Failed to fetch required historical data from FastAPI.' 
+        });
+    }
+    
+    // --- 3. Construct and Call the FastAPI /predict Endpoint ---
     const requestPayload = {
-        ticker: ticker.toUpperCase(),
-        days: days, // number of days to predict
-        // When integrating S3, the Node.js backend would fetch the 60-day 
-        // historical data CSV for 'ticker' from S3 here, parse it, and 
-        // include the data array in this payload.
+        ticker: tickerUpper,
+        days: days, 
+        data: historicalData // Pass the full historical records array
     };
 
     try {
-        // --- 2. Call the Flask Inference Server (Axios) ---
+        console.log(`Sending prediction request to: ${flaskInferenceUrl}`);
+        
         const response = await axios.post(
             flaskInferenceUrl, 
             requestPayload,
-            { timeout: 15000 } // Set a generous timeout for the ML model
+            { timeout: 30000 } // Set a generous timeout for the ML model
         );
 
-        // --- 3. Process and Return Response ---
-        // Assuming the Flask server returns { prediction: [...] }
+        // --- 4. Process and Return Response ---
+        // Assuming the FastAPI server returns { ticker, days_predicted, predictions, last_known_price }
         res.status(200).json({
-            ticker: ticker.toUpperCase(),
+            ticker: tickerUpper,
             predictionDays: days,
-            predictions: response.data.prediction, 
+            predictions: response.data.predictions, 
+            lastKnownPrice: response.data.last_known_price,
             message: 'Prediction successfully retrieved from ML service.'
         });
 
     } catch (error) {
-        console.error('Error calling Flask service:', error.message);
+        console.error('Error calling FastAPI /predict service:', error.message);
         
-        // Handle network/connection errors
         if (axios.isAxiosError(error) && error.code === 'ECONNREFUSED') {
             return res.status(503).json({ 
                 error: 'Service Unavailable', 
@@ -63,7 +99,6 @@ export const handlePredictionRequest = async (req, res) => {
             });
         }
         
-        // Handle other internal errors (e.g., Flask server returned 500)
         res.status(500).json({ 
             error: 'Internal Server Error', 
             message: 'An unexpected error occurred during prediction processing.' 
