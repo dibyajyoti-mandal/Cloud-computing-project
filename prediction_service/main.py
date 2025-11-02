@@ -1,17 +1,18 @@
 from fastapi import FastAPI, HTTPException, status
 from models import PredictionRequest
-# Import the new PyTorch-based service
 from prediction_service import PredictionService, SEQUENCE_LENGTH
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
-# --- FastAPI Initialization ---
 app = FastAPI(
     title="PyTorch LSTM Stock Prediction API",
     description="Microservice for multi-day stock price forecasting using a pre-trained PyTorch LSTM model."
 )
 
-# --- Endpoints ---
+# Initialize service/load model when app starts
+PredictionService = PredictionService()
+PredictionService.get_model_status()
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():
@@ -22,7 +23,7 @@ async def health_check():
         "status": "healthy",
         "service": "PyTorch LSTM Stock Prediction API",
         "model_loaded": PredictionService.get_model_status(),
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.post("/predict", status_code=status.HTTP_200_OK)
@@ -75,11 +76,13 @@ async def predict_stock_price(request_data: PredictionRequest):
         )
 
     # 3. Return Results
+    last_known_close_price = request_data.data[-1].Close # FIX: Extract 'Close' price as float
+    
     return {
         "ticker": request_data.ticker,
         "days_predicted": request_data.days,
         "predictions": predicted_prices,
-        "last_known_price": request_data.data[-1]
+        "last_known_price": last_known_close_price
     }
 
 # --- Run server using ---
