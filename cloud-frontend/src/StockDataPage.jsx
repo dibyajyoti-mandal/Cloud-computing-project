@@ -9,11 +9,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  ReferenceDot // Added ReferenceDot for the prediction chart
 } from 'recharts';
 
-
-// Helper function to format large numbers 
+// Helper function to format large numbers (remains the same)
 const formatVolume = (volume) => {
     if (volume > 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
     if (volume > 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
@@ -21,9 +21,9 @@ const formatVolume = (volume) => {
     return volume;
 };
 
-
+// Dummy historical data (remains the same)
 const dummyData = {
-    "ticker": "AAPL",
+    "ticker": "Amazon(AMZN)",
     "days": 5,
     "data": [
       { "Open": 212.18917192393894, "High": 213.69746987061376, "Low": 210.34127831689767, "Close": 212.08929443359375, "Volume": 49325800 },
@@ -136,9 +136,65 @@ const dummyData = {
     ]
 };
 
+// Hardcoded prediction data from the image
+const dummyPredictionData = {
+    "days_predicted": 5,
+    "predictions": [
+        214.26174136956251,
+        214.19842390834674,
+        214.2448617801092,
+        214.34806110857608,
+        214.44579611289737
+    ]
+};
+
+// --- Custom Tooltip ---
+// This will be used by the combined chart
+const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload; // Get the full data point
+        
+        let price, title, color;
+        
+        // Check if we are hovering over a prediction or historical point
+        if (data.predictionClose !== null && data.predictionClose !== undefined) {
+            price = data.predictionClose;
+            title = 'Predicted Close';
+            color = 'text-orange-300';
+        } else if (data.historicalClose !== null && data.historicalClose !== undefined) {
+            price = data.historicalClose;
+            title = 'Close';
+            color = 'text-purple-400';
+        } else {
+             // Fallback for safety
+            return null;
+        }
+
+        if (price === null || price === undefined) return null;
+
+        return (
+            <div className="p-3 bg-gray-700/80 backdrop-blur-sm border border-gray-600 rounded-lg shadow-lg">
+                <p className="label text-gray-200 font-semibold">{`${label}`}</p>
+                <p className={`intro ${color}`}>
+                    {title}: ${price.toFixed(2)}
+                </p>
+            </div>
+        );
+    }
+    return null;
+};
+
+
+// --- Main StockDataPage Component ---
 export default function StockDataPage() {
+    // historicalData is for the table's initial state
     const [historicalData, setHistoricalData] = useState([]);
+    // predictionData is for the new prediction table
+    const [predictionData, setPredictionData] = useState([]);
+    // chartData is for the main chart, and will be updated on predict
+    const [chartData, setChartData] = useState([]);
     const [showPredictionMessage, setShowPredictionMessage] = useState(false);
+    const [isPredicted, setIsPredicted] = useState(false); // State to track if prediction has been run
 
     // Process data for both table and chart
     useEffect(() => {
@@ -150,123 +206,232 @@ export default function StockDataPage() {
             
             return {
                 ...day,
+                date: date, // Add full date object for prediction calculations
                 displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
                 change: change,
+                
+                // --- FIX FOR CHART SPLIT ---
+                historicalClose: day.Close, // Key for historical Area
+                predictionClose: null,       // Key for prediction Area
+                isPrediction: false          // Flag for reference dots
             };
         });
         setHistoricalData(processed);
+        setChartData(processed); // Initialize chartData with historical data
     }, []);
 
     const handlePredictClick = () => {
+        // If predictions are already shown, don't re-run
+        if (isPredicted) return;
+
         setShowPredictionMessage(true);
+        setIsPredicted(true); // Mark as predicted
+
+        // 1. Get last date from historicalData
+        const lastHistoricalDate = historicalData.length > 0
+            ? new Date(historicalData[historicalData.length - 1].date)
+            : new Date(); 
+
+        // 2. Generate predictedDays array
+        const predictedDays = dummyPredictionData.predictions.map((price, index) => {
+            const date = new Date(lastHistoricalDate);
+            date.setDate(lastHistoricalDate.getDate() + 1 + index);
+            return {
+                Open: null, High: null, Low: null, Volume: null, // No historical data for predictions
+                date: date,
+                displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                Close: price, // The predicted price
+                change: index === 0 ? price - lastHistoricalDate.Close : price - dummyPredictionData.predictions[index - 1],
+                historicalClose: null, 
+                predictionClose: price,
+                isPrediction: true
+            };
+        });
+
+        // 3. Create bridge point to connect the two graphs
+        const lastHistoricalPoint = historicalData[historicalData.length - 1];
+        const bridgePoint = {
+            ...lastHistoricalPoint,
+            historicalClose: null, // Don't draw in historical area
+            predictionClose: lastHistoricalPoint.Close // Start prediction area from this value
+        };
+        
+        // 4. Create new chart data, slicing last 5 days of historical data
+        const slicedHistoricalData = historicalData.slice(-5);
+        
+        // 5. Set the new combined chart data and prediction table data
+        setChartData([...slicedHistoricalData, bridgePoint, ...predictedDays]);
+        setPredictionData(predictedDays); // Set data for the new table
+
+        // 6. Set timeout
         setTimeout(() => setShowPredictionMessage(false), 3000);
     };
 
-    // Custom Tooltip for the chart for a better look
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="p-3 bg-gray-700/80 backdrop-blur-sm border border-gray-600 rounded-lg shadow-lg">
-                    <p className="label text-gray-200 font-semibold">{`${label}`}</p>
-                    <p className="intro text-purple-400">{`Close : $${payload[0].value.toFixed(2)}`}</p>
-                </div>
-            );
-        }
-        return null;
-    };
-
     return (
-        
         <div className="min-h-screen w-full bg-gray-900 text-gray-300 font-sans p-6 lg:p-10">
-            <main className="max-w-7xl mx-auto">
+            <main>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
                     
-                    
+                    {/* === LEFT COLUMN: HEADER & DYNAMIC TABLE === */}
                     <div className="lg:col-span-2">
                         <div className="mb-6">
                             <h1 className="text-7xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500
                                            filter drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
                                 {dummyData.ticker}
                             </h1>
-                            <p className="text-center text-gray-400 text-lg">Historical Price Data</p>
+                            <p className="text-center text-gray-400 text-lg">
+                                {isPredicted ? "Predicted Price Data" : "Historical Price Data"}
+                            </p>
                         </div>
 
-                  
-                        <div className="rounded-lg bg-gray-800/50 border border-gray-700 shadow-xl max-h-[70vh] overflow-y-auto">
-                            <table className="w-full text-left table-fixed">
-                                <thead className="sticky top-0 bg-gray-800/90 backdrop-blur-sm z-10">
-                                    <tr>
-                                       
-                                        <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider w-1/5">Date</th>
-                                        <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">High</th>
-                                        <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">Low</th>
-                                        <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">Close</th>
-                                        <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">Volume</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-700/50">
-                                    {historicalData.slice().reverse().map((day, i) => {
-                                        const isPositive = day.change >= 0;
-                                        return (
-                                           
-                                            <tr key={i} className="hover:bg-gray-700/60 transition-colors duration-200">
-                                                
+                        {/* === DYNAMIC TABLE RENDER === */}
+                        {!isPredicted ? (
+                            /* === ENHANCED HISTORICAL TABLE (Shows before click) === */
+                            <div className="rounded-lg bg-gray-800/50 border border-gray-700 shadow-xl max-h-[70vh] overflow-y-auto">
+                                <table className="w-full text-left table-fixed">
+                                    <thead className="sticky top-0 bg-gray-800/90 backdrop-blur-sm z-10">
+                                        <tr>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider w-1/5">Date</th>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">High</th>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">Low</th>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">Close</th>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/5 border-l border-gray-700">Volume</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-700/50">
+                                        {historicalData.slice().reverse().map((day, i) => {
+                                            const isPositive = day.change >= 0;
+                                            return (
+                                                <tr key={i} className="hover:bg-gray-700/60 transition-colors duration-200">
+                                                    <td className="p-4 whitespace-nowrap text-base font-medium text-gray-200">{day.displayDate}</td>
+                                                    <td className="p-4 whitespace-nowrap text-base font-mono text-green-300 text-right border-l border-gray-700">{day.High.toFixed(2)}</td>
+                                                    <td className="p-4 whitespace-nowrap text-base font-mono text-red-300 text-right border-l border-gray-700">{day.Low.toFixed(2)}</td>
+                                                    <td className={`p-4 whitespace-nowrap text-base font-mono font-bold text-right border-l border-gray-700 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                                                        {day.Close.toFixed(2)}
+                                                    </td>
+                                                    <td className="p-4 whitespace-nowrap text-base font-mono text-gray-400 text-right border-l border-gray-700">{formatVolume(day.Volume)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            /* === NEW PREDICTION TABLE (Shows after click) === */
+                            <div className="rounded-lg bg-gray-800/50 border border-gray-700 shadow-xl max-h-[70vh] overflow-y-auto">
+                                <table className="w-full text-left table-fixed">
+                                    <thead className="sticky top-0 bg-gray-800/90 backdrop-blur-sm z-10">
+                                        <tr>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider w-1/2">Date</th>
+                                            <th className="p-4 text-sm font-semibold text-gray-300 uppercase tracking-wider text-right w-1/2">Predicted Close</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-700/50">
+                                        {predictionData.map((day, i) => (
+                                            <tr key={`pred-${i}`} className="hover:bg-gray-700/60 transition-colors duration-200">
                                                 <td className="p-4 whitespace-nowrap text-base font-medium text-gray-200">{day.displayDate}</td>
-                                                
-                                                <td className="p-4 whitespace-nowrap text-base font-mono text-green-300 text-right border-l border-gray-700">{day.High.toFixed(2)}</td>
-                                                <td className="p-4 whitespace-nowrap text-base font-mono text-red-300 text-right border-l border-gray-700">{day.Low.toFixed(2)}</td>
-                                                <td className={`p-4 whitespace-nowrap text-base font-mono font-bold text-right border-l border-gray-700 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                                                    {day.Close.toFixed(2)}
+                                                <td className="p-4 whitespace-nowrap text-base font-mono text-orange-300 font-bold text-right">
+                                                    ${day.Close.toFixed(2)}
                                                 </td>
-                                                <td className="p-4 whitespace-nowrap text-base font-mono text-gray-400 text-right border-l border-gray-700">{formatVolume(day.Volume)}</td>
                                             </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
 
-                  
+                    {/* === RIGHT COLUMN: COMBINED RECHARTS GRAPH === */}
                     <div className="lg:col-span-3 flex flex-col justify-center">
-                         <h2 className="text-2xl font-bold mb-4 text-white">Closing Price Trend</h2>
-                        <div className="w-full h-[500px]">
+                         <h2 className="text-2xl font-bold mb-4 text-white">
+                            {isPredicted ? "Historical & Predicted Trend" : "Historical Closing Price Trend"}
+                         </h2>
+                        <div className="w-full h-[500px] bg-gray-800/50 rounded-lg p-4 border border-gray-700">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart
-                                    data={historicalData}
+                                    data={chartData} // Use the chartData state, which updates on click
                                     margin={{ top: 5, right: 20, left: -10, bottom: 5 }}
                                 >
                                     <defs>
-                                        <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
+                                        {/* Gradient for historical data */}
+                                        <linearGradient id="colorHistorical" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
                                             <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0.05}/>
+                                        </linearGradient>
+                                        {/* Gradient for prediction data */}
+                                        <linearGradient id="colorPrediction" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#F97316" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="#F97316" stopOpacity={0.05}/>
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                                     <XAxis dataKey="displayDate" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
                                     <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} domain={['dataMin - 10', 'dataMax + 10']} />
                                     <Tooltip content={<CustomTooltip />} />
-                                    <Area type="monotone" dataKey="Close" stroke="#A78BFA" fillOpacity={1} fill="url(#colorClose)" strokeWidth={2} />
+                                    
+                                    {/* Area for historical data */}
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey="historicalClose" 
+                                        stroke="#A78BFA" 
+                                        fillOpacity={1} 
+                                        fill="url(#colorHistorical)" 
+                                        strokeWidth={2} 
+                                    />
+                                    {/* Area for prediction data */}
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey="predictionClose" 
+                                        stroke="#F97316" // Orange line
+                                        fillOpacity={1} 
+                                        fill="url(#colorPrediction)" 
+                                        strokeWidth={2}
+                                        strokeDasharray="5 5" // Dashed line for prediction
+                                    />
+
+                                    {/* Add ReferenceDots for predicted points */}
+                                    {chartData.filter(d => d.isPrediction).map((day, index) => (
+                                        <ReferenceDot
+                                            key={`pred-dot-${index}`}
+                                            x={day.displayDate}
+                                            y={day.Close}
+                                            r={6}
+                                            fill="#F97316"
+                                            stroke="#FFFFFF"
+                                            strokeWidth={2}
+                                            ifOverflow="visible"
+                                        />
+                                    ))}
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
 
-                
+                {/* === BIG GLOWING PREDICT BUTTON AT THE BOTTOM === */}
                 <div className="text-center mt-12">
                     <button
                         onClick={handlePredictClick}
+                        // Disable button if predictions are already shown
+                        disabled={isPredicted}
                         className="relative inline-flex items-center justify-center gap-3 px-10 py-4 bg-purple-600 text-white font-bold text-lg rounded-lg shadow-lg
                                    hover:bg-purple-700 transition-all duration-300 ease-in-out transform hover:scale-105
                                    focus:outline-none focus:ring-4 focus:ring-purple-500 focus:ring-opacity-50
-                                   shadow-[0_0_20px_rgba(168,85,247,0.5)] hover:shadow-[0_0_35px_rgba(168,85,247,0.8)]"
+                                   shadow-[0_0_20px_rgba(168,85,247,0.5)] hover:shadow-[0_0_35px_rgba(168,85,247,0.8)]
+                                   disabled:bg-gray-500 disabled:shadow-none disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
-                        <Rocket size={24} />
-                        Predict Next {dummyData.days} Days
+                       
+                        {isPredicted ? "Predictions Loaded" : `Predict Next ${dummyData.days} Days`}
                     </button>
+                    {showPredictionMessage && (
+                        <p className="mt-4 text-green-400 font-semibold animate-pulse">
+                            Generating predictions...
+                        </p>
+                    )}
                 </div>
             </main>
         </div>
     );
 }
+
+
