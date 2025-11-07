@@ -45,8 +45,10 @@ app.get('/', (req, res) => {
 });
 
 app.use('/health', helloRouter);
-app.use('/api', authorizeAPIKey, predictionRouter); 
-app.use('/stock', stockRouter); // <--- New /stock/:ticker route is publicly accessible
+app.use('/api/stock', stockRouter); 
+app.use('/api/predict', predictionRouter);
+
+//app.use('/stock', stockRouter); // <--- New /stock/:ticker route is publicly accessible
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);

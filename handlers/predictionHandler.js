@@ -42,6 +42,7 @@ export const handlePredictionRequest = async (req, res) => {
         historicalData = historyResponse.data; // This should be the list of 119 DailyRecord objects
         
         // Manual check for data structure consistency
+        console.log(" the length is " , historicalData.length);
         if (!Array.isArray(historicalData) || historicalData.length < 119) {
              throw new Error("FastAPI did not return the required 119 days of historical data.");
         }

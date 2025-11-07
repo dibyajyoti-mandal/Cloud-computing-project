@@ -39,7 +39,7 @@ export const getStockClosingPrices = async (req, res) => {
         res.status(200).json({
             ticker: ticker.toUpperCase(),
             data_points: closingPrices.length,
-            closing_prices: closingPrices,
+            data: historicalDataList,
             message: `Successfully retrieved and filtered ${closingPrices.length} closing prices.`
         });
 

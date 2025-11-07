@@ -1,6 +1,5 @@
 // routes/stockRouter.js (UPDATED)
 import express from 'express';
-// Import the new handler
 import { getStockClosingPrices } from '../handlers/stockHandler.js'; 
 
 const router = express.Router();
