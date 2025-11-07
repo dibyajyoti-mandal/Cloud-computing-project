@@ -8,7 +8,10 @@ import yfinance as yf
 import pandas as pd
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
+from dotenv import load_dotenv
 import os
+
+load_dotenv()
 
 app = FastAPI(
     title="PyTorch LSTM Stock Prediction API",

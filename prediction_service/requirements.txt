@@ -7,3 +7,4 @@ scikit-learn
 pandas
 yfinance
 boto3
+python-dotenv
